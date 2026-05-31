@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { TREE, QUIZZES, INFO } from '../data/wineTree';
-import { useWine, XP_EARN } from '../context/WineContext';
+import { useWine } from '../context/WineContext';
 
 const PASS_SCORE = 12;   // 80% of 15
 const TOTAL_Q    = 15;
@@ -25,7 +25,7 @@ const STRENGTH_LABELS = { 1: 'New', 2: 'Learning', 3: 'Strong', 4: 'Mastered' };
 // ── Tree helpers ──────────────────────────────────────────────────────────────
 function getDepth(id) {
   let depth = 0, cur = TREE.find(n => n.id === id);
-  while (cur?.parent) { depth++; cur = TREE.find(n => n.id === cur.parent); }
+  while (cur?.parent) { depth++; const pid = cur.parent; cur = TREE.find(n => n.id === pid); }
   return depth;
 }
 
@@ -33,7 +33,7 @@ function getBranch(id) {
   // Returns the depth-1 ancestor (branch) of a node, or null if it IS the root
   let cur = TREE.find(n => n.id === id);
   while (cur && cur.parent && cur.parent !== 'wine') {
-    cur = TREE.find(n => n.id === cur.parent);
+    const pid = cur.parent; cur = TREE.find(n => n.id === pid);
   }
   return (cur && cur.parent === 'wine') ? cur.id : null;
 }
