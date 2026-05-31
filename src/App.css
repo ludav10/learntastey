@@ -2650,14 +2650,105 @@ body {
   50% { transform: scale(1.1); opacity: 0.8; }
 }
 
+/* ─── BOTTOM NAV (hidden on desktop) ─── */
+.bottom-nav { display: none; }
+
 /* ─── RESPONSIVE ─── */
-@media (max-width: 480px) {
-  .tasting-cards { grid-template-columns: 1fr; }
-  .bottom-row { grid-template-columns: 1fr; }
-  .region-grid { grid-template-columns: 1fr; }
-  .form-row { grid-template-columns: 1fr; }
+@media (max-width: 640px) {
+
+  /* ── Bottom tab bar ── */
+  .navbar-links { display: none; }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg2);
+    border-top: 1px solid var(--border2);
+    z-index: 200;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 2px 6px;
+    min-height: 56px;
+    color: var(--text-mute);
+    text-decoration: none;
+    transition: color 0.15s;
+    gap: 2px;
+  }
+  .bottom-nav-item.active { color: var(--rose); }
+  .bottom-nav-icon  { font-size: 22px; line-height: 1; }
+  .bottom-nav-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+
+  /* ── Safe area & scroll ── */
+  .navbar {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .main-content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── iOS input zoom fix (font < 16px triggers autozoom) ── */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* ── Touch targets ── */
+  .btn-primary, .btn-ghost, .btn-danger {
+    min-height: 48px;
+    font-size: 15px;
+  }
+  .pill { min-height: 40px; padding: 8px 14px; }
+  .filter-btn { min-height: 36px; }
+  .nav-link { min-height: 44px; display: flex; align-items: center; }
+
+  /* ── Layout ── */
+  .tasting-cards  { grid-template-columns: 1fr; }
+  .bottom-row     { grid-template-columns: 1fr; }
+  .region-grid    { grid-template-columns: 1fr; }
+  .form-row       { grid-template-columns: 1fr; }
+  .level-stats-row { grid-template-columns: repeat(3,1fr); }
+  .xp-bar-row     { grid-template-columns: 80px 1fr 50px; }
+
+  /* ── Typography ── */
+  .page-title { font-size: 24px; }
+  .party-hero-title { font-size: 30px; }
   .daily-question { font-size: 17px; }
   .daily-deco { display: none; }
-  .navbar-links { gap: 3px; }
-  .nav-link { padding: 6px 10px; font-size: 12px; }
+  .party-code-display { font-size: 56px; letter-spacing: 8px; }
+
+  /* ── Cards & pages ── */
+  .page { padding: 16px 12px; }
+  .party-page { padding: 16px 12px 80px; }
+  .level-page { padding: 16px 12px 80px; }
+  .modal { margin: 8px; padding: 20px 16px; max-height: 90vh; overflow-y: auto; }
+  .edit-modal { max-height: 90vh; overflow-y: auto; }
+
+  /* ── Journal ── */
+  .wine-row { padding: 12px; }
+  .wine-name { font-size: 14px; }
+
+  /* ── Party mode cards ── */
+  .party-mode-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .party-mode-card { padding: 16px 10px; }
+  .party-mode-emoji { font-size: 32px; }
+  .party-mode-title { font-size: 14px; }
+
+  /* ── Learn tree ── */
+  .learn-topbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .learn-topbar-right { gap: 6px; }
+}
+
+@media (max-width: 380px) {
+  .bottom-nav-label { display: none; }
+  .bottom-nav-icon  { font-size: 24px; }
+  .bottom-nav-item  { min-height: 52px; }
 }
