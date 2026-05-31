@@ -528,25 +528,58 @@ export default function Learn() {
     if (dragRef.current) { const { lx, ly } = dragRef.current; setTfm(t => ({ ...t, x: lx, y: ly })); }
     dragRef.current = null;
   }
+  function pinchDist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
   function onTouchStart(e) {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    dragRef.current = { sx: t.clientX, sy: t.clientY, tx: tfm.x, ty: tfm.y,
-      scale: tfm.scale, factor: 1300 / svgRef.current.getBoundingClientRect().width, lx: tfm.x, ly: tfm.y };
-    movedRef.current = false;
+    const rect = svgRef.current.getBoundingClientRect();
+    const factor = 1300 / rect.width;
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      dragRef.current = { pinch: false, sx: t.clientX, sy: t.clientY,
+        tx: tfm.x, ty: tfm.y, scale: tfm.scale, factor,
+        lx: tfm.x, ly: tfm.y, ls: tfm.scale };
+      movedRef.current = false;
+    } else if (e.touches.length === 2) {
+      dragRef.current = { pinch: true, startDist: pinchDist(e.touches),
+        startScale: tfm.scale, tx: tfm.x, ty: tfm.y,
+        smx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        smy: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        factor, lx: tfm.x, ly: tfm.y, ls: tfm.scale };
+    }
   }
   function onTouchMove(e) {
-    const d = dragRef.current; if (!d || e.touches.length !== 1) return;
+    const d = dragRef.current; if (!d) return;
     e.preventDefault();
-    const t = e.touches[0];
-    const dx = (t.clientX - d.sx) * d.factor, dy = (t.clientY - d.sy) * d.factor;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
-    const nx = d.tx + dx, ny = d.ty + dy;
-    dragRef.current.lx = nx; dragRef.current.ly = ny;
-    if (gRef.current) gRef.current.setAttribute('transform', `translate(${nx},${ny}) scale(${d.scale})`);
+    if (d.pinch && e.touches.length === 2) {
+      const ratio    = pinchDist(e.touches) / d.startDist;
+      const ns       = Math.min(3.5, Math.max(0.28, d.startScale * ratio));
+      const mx       = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const my       = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const panX     = (mx - d.smx) * d.factor;
+      const panY     = (my - d.smy) * d.factor;
+      const nx       = d.tx + panX;
+      const ny       = d.ty + panY;
+      dragRef.current.lx = nx; dragRef.current.ly = ny; dragRef.current.ls = ns;
+      if (gRef.current) gRef.current.setAttribute('transform', `translate(${nx},${ny}) scale(${ns})`);
+    } else if (!d.pinch && e.touches.length === 1) {
+      const t  = e.touches[0];
+      const dx = (t.clientX - d.sx) * d.factor;
+      const dy = (t.clientY - d.sy) * d.factor;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
+      const nx = d.tx + dx, ny = d.ty + dy;
+      dragRef.current.lx = nx; dragRef.current.ly = ny;
+      if (gRef.current) gRef.current.setAttribute('transform', `translate(${nx},${ny}) scale(${d.scale})`);
+    }
   }
   function onTouchEnd() {
-    if (dragRef.current) { const { lx, ly } = dragRef.current; setTfm(t => ({ ...t, x: lx, y: ly })); }
+    if (dragRef.current) {
+      const { lx, ly, ls } = dragRef.current;
+      setTfm(t => ({ x: lx, y: ly, scale: ls ?? t.scale }));
+    }
     dragRef.current = null;
   }
 
@@ -632,6 +665,7 @@ export default function Learn() {
 
       {/* ── Graph ────────────────────────────────────────────────── */}
       <div className="learn-canvas"
+        style={{ touchAction: 'none' }}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}    onMouseLeave={onMouseUp}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
