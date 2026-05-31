@@ -118,14 +118,13 @@ function scoreAll(rawPlayers, answer) {
 export default function TastingParty() {
   const { addXP } = useWine();
   const navigate = useNavigate();
-  const [mode,    setMode]    = useState(null);       // null | 'one' | 'multi'
   const [phase,   setPhase]   = useState('intro');
   const [answer,  setAnswer]  = useState({ ...EMPTY_ANSWER });
   const [players, setPlayers] = useState([]);        // unscored while guessing
   const [current, setCurrent] = useState({ name: '', ...EMPTY_GUESS });
 
   function startGuessing() { setPlayers([]); setPhase('name'); }
-  function chooseMode(m)   { if (m === 'multi') { navigate('/party/multi'); return; } setMode(m); if (m === 'one') setPhase('setup'); }
+  function chooseMode(m)   { if (m === 'multi') { navigate('/party/multi'); return; } if (m === 'one') setPhase('setup'); }
 
   function nextPlayer() {
     setPlayers(p => [...p, { name: current.name, guess: { ...current } }]);
@@ -148,7 +147,7 @@ export default function TastingParty() {
 
   function restart() {
     setPlayers([]); setCurrent({ name: '', ...EMPTY_GUESS });
-    setAnswer({ ...EMPTY_ANSWER }); setMode(null); setPhase('intro');
+    setAnswer({ ...EMPTY_ANSWER }); setPhase('intro');
   }
 
   const MAX_PTS = 2 + 2 + 4 + 4 + 6 + 5 + 3; // = 26
