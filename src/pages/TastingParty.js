@@ -165,38 +165,23 @@ export default function TastingParty() {
       </div>
 
       <div className="party-mode-row">
+        <button className="party-mode-card" onClick={() => chooseMode('multi')}>
+          <div className="party-mode-emoji">🎉</div>
+          <div className="party-mode-title">Each Phone</div>
+          <div className="party-mode-sub">Everyone answers on their own device.</div>
+          <div className="btn-primary" style={{marginTop:12,fontSize:13,padding:'8px 20px'}}>Play now →</div>
+        </button>
         <button className="party-mode-card" onClick={() => chooseMode('one')}>
           <div className="party-mode-emoji">📱</div>
           <div className="party-mode-title">One Phone</div>
           <div className="party-mode-sub">Pass the phone around. Classic mode.</div>
           <div className="btn-primary" style={{marginTop:12,fontSize:13,padding:'8px 20px'}}>Play now →</div>
         </button>
-        <button className="party-mode-card coming-soon" onClick={() => chooseMode('multi')}>
-          <div className="party-mode-emoji">🎉</div>
-          <div className="party-mode-title">Each Phone</div>
-          <div className="party-mode-sub">Everyone answers on their own device.</div>
-          <div className="party-mode-badge">Coming soon</div>
-        </button>
       </div>
 
       <div className="party-scoring-hint">
         <strong>Scoring:</strong> Colour · World · Grape · Country · Region — exact wins.
         <br />Vintage &amp; Price — <em>closest player gets most points!</em>
-      </div>
-    </div>
-  );
-
-  // ── Multi-phone coming soon ─────────────────────────────────────────────────
-  if (mode === 'multi') return (
-    <div className="party-page">
-      <div className="party-card" style={{textAlign:'center',paddingTop:40,paddingBottom:40}}>
-        <div style={{fontSize:56,marginBottom:12}}>🚧</div>
-        <h2 className="party-card-title">Coming soon!</h2>
-        <p className="party-hint" style={{marginBottom:24}}>
-          Multiplayer mode — where everyone joins on their own phone — is coming in the next update.
-          <br /><br />For now, use One Phone mode and pass it around!
-        </p>
-        <button className="btn-primary" onClick={() => { setMode(null); setPhase('intro'); }}>← Back</button>
       </div>
     </div>
   );
