@@ -11,8 +11,8 @@ export default function Navbar() {
         <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Home</NavLink>
         <NavLink to="/journal" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Journal</NavLink>
         <NavLink to="/explore" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Explore</NavLink>
-        <NavLink to="/globe" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>🌍</NavLink>
         <NavLink to="/learn" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Learn</NavLink>
+        <NavLink to="/party" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Party 🎉</NavLink>
       </div>
     </nav>
   );

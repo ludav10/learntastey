@@ -3,10 +3,10 @@ import { WineProvider } from './context/WineContext';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Journal from './pages/Journal';
-import Explore from './pages/Explore';
 import GlobeView from './pages/GlobeView';
 import Learn from './pages/Learn';
 import { QuickLog, OpenTasting, BlindTasting } from './pages/TastingFlow';
+import TastingParty from './pages/TastingParty';
 import { SvgWineGlass, SvgGrapes, SvgBarrel, SvgBottle, SvgLeaf, SvgCorkscrew } from './components/WineDecorations';
 import './App.css';
 
@@ -31,12 +31,12 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/journal" element={<Journal />} />
-              <Route path="/explore" element={<Explore />} />
+              <Route path="/explore" element={<GlobeView />} />
               <Route path="/learn" element={<Learn />} />
-              <Route path="/globe" element={<GlobeView />} />
               <Route path="/tasting/quick" element={<QuickLog />} />
               <Route path="/tasting/open" element={<OpenTasting />} />
               <Route path="/tasting/blind" element={<BlindTasting />} />
+              <Route path="/party" element={<TastingParty />} />
             </Routes>
           </main>
         </div>

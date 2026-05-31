@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWine } from '../context/WineContext';
 import WineColorDot from '../components/WineColorDot';
-import { WINE_GRAPES, WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
+import { WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
+import GrapeInput from '../components/GrapeInput';
 
 const COLORS = ['All', 'Red', 'White', 'Rosé', 'Orange', 'Sparkling'];
 
@@ -46,9 +47,8 @@ function EditModal({ wine, onSave, onClose }) {
           </div>
         </div>
         <div className="form-group">
-          <label>Grape</label>
-          <input value={form.grape || ''} onChange={e => set('grape', e.target.value)} list="grape-list" />
-          <datalist id="grape-list">{WINE_GRAPES.map(g => <option key={g} value={g} />)}</datalist>
+          <label>Grape(s)</label>
+          <GrapeInput value={form.grape || ''} onChange={v => set('grape', v)} listId="journal-grape-list" />
         </div>
         <div className="form-group">
           <label>Rating: <strong>{form.rating}/10</strong></label>

@@ -1,51 +1,89 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { TREE, QUIZZES, INFO } from '../data/wineTree';
 
-const PASS_SCORE  = 8;
-const TOTAL_Q     = 15;
+const PASS_SCORE = 12;   // 80% of 15
+const TOTAL_Q    = 15;
+const BIG_Q      = 7;    // questions per branch in big quiz
+const BIG_INTERVAL_DAYS = 60;
+
 const STORAGE_KEY = 'learntasty_progress';
-const REVIEW_KEY  = 'learntasty_review';
+const REVIEW_KEY  = 'learntasty_review2';  // v2 schema — avoids conflicts with old data
 
-// ── Review system constants ───────────────────────────────────────────────────
-const INTERVALS = { 1: 3, 2: 7, 3: 21, 4: 60 }; // days per strength level
+// ── Branch IDs (direct children of 'wine') ───────────────────────────────────
+const BRANCH_IDS = TREE.filter(n => n.parent === 'wine').map(n => n.id);
 
+// ── Strength colours ──────────────────────────────────────────────────────────
 const STRENGTH_COLORS = {
   1: '#4080C0',  // New      — steel blue
   2: '#2E9E60',  // Learning — bright green
   3: '#C87820',  // Strong   — warm amber
   4: '#F0CC7A',  // Mastered — bright gold
 };
-
 const STRENGTH_LABELS = { 1: 'New', 2: 'Learning', 3: 'Strong', 4: 'Mastered' };
 
-function todayDate() {
-  const d = new Date(); d.setHours(0, 0, 0, 0); return d;
+// ── Tree helpers ──────────────────────────────────────────────────────────────
+function getDepth(id) {
+  let depth = 0, cur = TREE.find(n => n.id === id);
+  while (cur?.parent) { depth++; cur = TREE.find(n => n.id === cur.parent); }
+  return depth;
 }
-function addDays(dateStr, n) {
-  const d = new Date(dateStr); d.setDate(d.getDate() + n); return d;
+
+function getBranch(id) {
+  // Returns the depth-1 ancestor (branch) of a node, or null if it IS the root
+  let cur = TREE.find(n => n.id === id);
+  while (cur && cur.parent && cur.parent !== 'wine') {
+    cur = TREE.find(n => n.id === cur.parent);
+  }
+  return (cur && cur.parent === 'wine') ? cur.id : null;
 }
-function todayStr() {
-  return new Date().toISOString().split('T')[0];
+
+function isFullyMastered(id, progress) {
+  if (id !== 'wine' && !progress.has(id)) return false;
+  return TREE.filter(n => n.parent === id).every(c => isFullyMastered(c.id, progress));
 }
-function isNodeDue(rd) {
-  if (!rd) return true;
-  return todayDate() >= addDays(rd.lastReviewed, INTERVALS[rd.strength] || 3);
+
+function strengthFromDepth(id) {
+  const d = getDepth(id);
+  if (d <= 1) return 1;
+  if (d === 2) return 2;
+  return 3;
 }
-function nextReviewText(rd) {
-  if (!rd) return 'Due now 🔔';
-  const interval = INTERVALS[rd.strength] || 3;
-  const next = addDays(rd.lastReviewed, interval);
-  const diff = Math.round((next - todayDate()) / 86400000);
-  if (diff <= 0) return 'Due now 🔔';
-  if (diff === 1) return 'Due tomorrow';
-  return `Due in ${diff} days`;
+
+function getNodeStrength(id, progress, branchPenalties) {
+  if (id === 'wine') return isFullyMastered('wine', progress) ? 4 : 0;
+  if (!progress.has(id)) return 0;
+  if (isFullyMastered(id, progress)) return 4;
+  const base   = strengthFromDepth(id);
+  const branch = getBranch(id);
+  const penalty = branch ? (branchPenalties[branch] ?? 0) : 0;
+  return Math.max(1, base - penalty);
 }
-function lastReviewedText(rd) {
-  if (!rd) return 'Never';
-  const diff = Math.round((todayDate() - new Date(rd.lastReviewed)) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return `${diff} days ago`;
+
+function getBranchNodes(branchId) {
+  const nodes = [];
+  function collect(id) {
+    nodes.push(id);
+    TREE.filter(n => n.parent === id).forEach(c => collect(c.id));
+  }
+  collect(branchId);
+  return nodes;
+}
+
+function getBranchQuestionPool(branchId) {
+  const pool = [];
+  getBranchNodes(branchId).forEach(nid => {
+    (QUIZZES[nid] || []).forEach(q => pool.push({ ...q, _nid: nid }));
+  });
+  return pool;
+}
+
+function sampleN(arr, n) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(n, copy.length));
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -56,33 +94,23 @@ function loadProgress() {
 function saveProgress(s) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...s]));
 }
+
+const EMPTY_REVIEW = { branchPenalties: {}, lastBigQuiz: null };
 function loadReviewData() {
-  try { return JSON.parse(localStorage.getItem(REVIEW_KEY)) || {}; }
-  catch { return {}; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(REVIEW_KEY));
+    if (!raw || !('branchPenalties' in raw)) return { ...EMPTY_REVIEW };
+    return raw;
+  } catch { return { ...EMPTY_REVIEW }; }
 }
 function saveReviewData(d) {
   localStorage.setItem(REVIEW_KEY, JSON.stringify(d));
 }
 
-// Decay: if overdue by more than one full interval, drop strength by 1
-function applyDecay(reviewData) {
-  const t = todayDate();
-  const updated = { ...reviewData };
-  let changed = false;
-  for (const [id, rd] of Object.entries(reviewData)) {
-    if (!rd || rd.strength <= 1) continue;
-    const interval = INTERVALS[rd.strength] || 3;
-    const due = addDays(rd.lastReviewed, interval);
-    const overdueDays = Math.round((t - due) / 86400000);
-    if (overdueDays >= interval) {
-      updated[id] = { ...rd, strength: Math.max(1, rd.strength - 1) };
-      changed = true;
-    }
-  }
-  return changed ? updated : reviewData;
-}
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayDate() { const d = new Date(); d.setHours(0,0,0,0); return d; }
 
-// ── Radial tree layout ────────────────────────────────────────────────────────
+// ── Radial layout ─────────────────────────────────────────────────────────────
 const CX = 650, CY = 650;
 const RADII = [0, 220, 420, 630];
 
@@ -123,7 +151,7 @@ function nodeStatus(id, progress) {
   return 'locked';
 }
 
-// ── Quiz Modal ────────────────────────────────────────────────────────────────
+// ── Individual Quiz Modal ─────────────────────────────────────────────────────
 function QuizModal({ nodeId, onClose, onPass }) {
   const node = TREE.find(n => n.id === nodeId);
   const questions = QUIZZES[nodeId] || [];
@@ -138,7 +166,7 @@ function QuizModal({ nodeId, onClose, onPass }) {
     if (idx === questions[qi].a) setScore(s => s + 1);
   }
   function next() {
-    if (qi + 1 >= TOTAL_Q) { setDone(true); }
+    if (qi + 1 >= TOTAL_Q) setDone(true);
     else { setQi(q => q + 1); setChosen(null); }
   }
 
@@ -177,13 +205,11 @@ function QuizModal({ nodeId, onClose, onPass }) {
           </>
         ) : (
           <div className="quiz-result">
-            <div className={`quiz-result-icon ${passed ? 'pass' : 'fail'}`}>
-              {passed ? '🏆' : '📚'}
-            </div>
+            <div className={`quiz-result-icon ${passed ? 'pass' : 'fail'}`}>{passed ? '🏆' : '📚'}</div>
             <h2 className="quiz-result-title">{passed ? 'Passed!' : 'Not quite'}</h2>
             <div className="quiz-score">{score} / {TOTAL_Q}</div>
             <div className="quiz-score-label">
-              {passed ? `${node?.label} unlocked!` : `Need ${PASS_SCORE} to pass. Try again!`}
+              {passed ? `${node?.label} unlocked!` : `Need ${PASS_SCORE}/15 (80%) to pass.`}
             </div>
             <div className="modal-footer" style={{ marginTop: 24 }}>
               <button className="btn-ghost" onClick={onClose}>Close</button>
@@ -199,14 +225,249 @@ function QuizModal({ nodeId, onClose, onPass }) {
   );
 }
 
+// ── Big Quiz Modal ────────────────────────────────────────────────────────────
+function BigQuizModal({ onClose, onComplete }) {
+  // Build quiz sections once on mount
+  const [sections] = useState(() =>
+    BRANCH_IDS.map(branchId => {
+      const pool = getBranchQuestionPool(branchId);
+      return { branchId, questions: sampleN(pool, BIG_Q) };
+    })
+  );
+
+  // Flatten to one array, keep branchId per question
+  const quiz = useMemo(() =>
+    sections.flatMap(s => s.questions.map(q => ({ ...q, branchId: s.branchId }))),
+  [sections]);
+
+  const [qi,       setQi]     = useState(0);
+  const [chosen,   setChosen] = useState(null);
+  const [answers,  setAnswers] = useState([]);
+  const [done,     setDone]   = useState(false);
+
+  const total = quiz.length;
+  const q     = quiz[qi];
+  const branchNode = TREE.find(n => n.id === q?.branchId);
+
+  // Section progress within current branch
+  const sectionIdx   = BRANCH_IDS.indexOf(q?.branchId);
+  const qInSection   = answers.filter(a => a.branchId === q?.branchId).length + 1;
+
+  function pick(idx) { if (chosen !== null) return; setChosen(idx); }
+
+  function next() {
+    const newAnswers = [...answers, { correct: chosen === q.a, branchId: q.branchId }];
+    setAnswers(newAnswers);
+    if (qi + 1 >= total) setDone(true);
+    else { setQi(qi + 1); setChosen(null); }
+  }
+
+  // Results per branch
+  const results = useMemo(() => {
+    if (!done) return [];
+    return BRANCH_IDS.map(branchId => {
+      const branch = TREE.find(n => n.id === branchId);
+      const ba = answers.filter(a => a.branchId === branchId);
+      const correct = ba.filter(a => a.correct).length;
+      const penalty = correct >= 6 ? 0 : correct >= 4 ? 1 : 2;
+      return { branchId, branch, correct, total: ba.length, penalty };
+    });
+  }, [done, answers]);
+
+  function finish() {
+    onComplete(results);
+    onClose();
+  }
+
+  if (done) {
+    const allPassed = results.every(r => r.penalty === 0);
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal big-quiz-result" onClick={e => e.stopPropagation()}>
+          <h2 className="quiz-result-title" style={{ marginBottom: 4 }}>
+            {allPassed ? '🏆 Excellent!' : '📊 Big Quiz Results'}
+          </h2>
+          <p style={{ color: 'var(--text-mute)', fontSize: 13, marginBottom: 18 }}>
+            Results per branch — your node strength has been updated.
+          </p>
+          <div className="big-quiz-results-table">
+            {results.map(r => (
+              <div key={r.branchId} className={`big-quiz-result-row penalty-${r.penalty}`}>
+                <span className="bqr-branch">{r.branch?.icon} {r.branch?.label}</span>
+                <span className="bqr-score">{r.correct}/{r.total}</span>
+                <span className="bqr-outcome">
+                  {r.penalty === 0 ? '✅ No change'
+                   : r.penalty === 1 ? '⬇ −1 level'
+                   : '⬇⬇ −2 levels'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button className="btn-primary" style={{ marginTop: 20, width: '100%' }} onClick={finish}>
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal quiz-modal" onClick={e => e.stopPropagation()}>
+        <div className="quiz-header">
+          <div className="quiz-node-title">
+            {branchNode?.icon} {branchNode?.label}
+            <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-mute)', marginLeft: 8 }}>
+              {qInSection}/{BIG_Q}
+            </span>
+          </div>
+          <div className="quiz-progress">{qi + 1} / {total}</div>
+        </div>
+        {/* Per-branch section dots */}
+        <div className="big-quiz-sections">
+          {BRANCH_IDS.map((b, i) => (
+            <div key={b} className={`bq-section-dot ${i < sectionIdx ? 'done' : i === sectionIdx ? 'active' : ''}`} />
+          ))}
+        </div>
+        <div className="quiz-progress-bar">
+          <div className="quiz-progress-fill" style={{ width: `${(qi / total) * 100}%` }} />
+        </div>
+        <div className="quiz-question">{q?.q}</div>
+        <div className="quiz-options">
+          {q?.opts.map((opt, i) => {
+            let cls = 'quiz-opt';
+            if (chosen !== null) {
+              if (i === q.a) cls += ' correct';
+              else if (i === chosen) cls += ' wrong';
+              else cls += ' dim';
+            }
+            return <button key={i} className={cls} onClick={() => pick(i)}>{opt}</button>;
+          })}
+        </div>
+        {chosen !== null && (
+          <button className="btn-primary quiz-next" onClick={next}>
+            {qi + 1 >= total ? 'See results →' : 'Next →'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Progress level thresholds ─────────────────────────────────────────────────
+const LEVELS = [
+  { min: 0,   name: 'Novice',      emoji: '🌱' },
+  { min: 15,  name: 'Beginner',    emoji: '📖' },
+  { min: 35,  name: 'Enthusiast',  emoji: '🍷' },
+  { min: 55,  name: 'Connoisseur', emoji: '🍾' },
+  { min: 75,  name: 'Expert',      emoji: '🏆' },
+  { min: 100, name: 'Master',      emoji: '🎓' },
+];
+
+function getLevel(pct) {
+  return [...LEVELS].reverse().find(l => pct >= l.min) || LEVELS[0];
+}
+
+const MILESTONES = [
+  { id: 'first',    label: 'First quiz passed',      check: (p) => p.size >= 1 },
+  { id: 'grapes',   label: 'Grapes branch complete',  check: (p) => getBranchNodes('grapes').every(id => p.has(id)) },
+  { id: 'regions',  label: 'Regions branch complete', check: (p) => getBranchNodes('regions').every(id => p.has(id)) },
+  { id: 'half',     label: '50% of nodes done',       check: (p, total) => p.size >= total * 0.5 },
+  { id: 'three',    label: 'Three branches complete',  check: (p) => BRANCH_IDS.filter(b => getBranchNodes(b).every(id => p.has(id))).length >= 3 },
+  { id: 'master',   label: 'Full mastery — all done', check: (p, total) => p.size >= total },
+];
+
+// ── Progress Modal ────────────────────────────────────────────────────────────
+function ProgressModal({ progress, reviewData, onClose }) {
+  const allNodes  = TREE.filter(n => n.id !== 'wine');
+  const total     = allNodes.length;
+  const done      = progress.size;
+  const pct       = total > 0 ? Math.round((done / total) * 100) : 0;
+  const level     = getLevel(pct);
+
+  const branches = BRANCH_IDS.map(bid => {
+    const nodes    = getBranchNodes(bid);
+    const doneCount = nodes.filter(id => progress.has(id)).length;
+    const branch   = TREE.find(n => n.id === bid);
+    const pen      = reviewData.branchPenalties?.[bid] ?? 0;
+    return { bid, branch, doneCount, total: nodes.length, pen };
+  });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal progress-modal" onClick={e => e.stopPropagation()}>
+        <div className="progress-modal-header">
+          <h2 className="progress-modal-title">Your Progress</h2>
+          <button className="node-panel-close" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Overall level */}
+        <div className="progress-level-badge">
+          <span className="progress-level-emoji">{level.emoji}</span>
+          <div>
+            <div className="progress-level-name">{level.name}</div>
+            <div className="progress-level-sub">{done} / {total} nodes completed</div>
+          </div>
+          <div className="progress-pct">{pct}%</div>
+        </div>
+        <div className="progress-bar-wrap">
+          <div className="progress-bar-track">
+            <div className="progress-bar-fill" style={{ width: `${pct}%`, background: pct >= 100 ? '#F0CC7A' : pct >= 75 ? '#C87820' : pct >= 55 ? '#2E9E60' : '#4080C0' }} />
+          </div>
+          {/* Level markers */}
+          <div className="progress-level-markers">
+            {LEVELS.slice(1).map(l => (
+              <div key={l.min} className="progress-marker" style={{ left: `${l.min}%` }} title={l.name}>
+                <div className="progress-marker-dot" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Branch breakdown */}
+        <div className="progress-branches">
+          {branches.map(({ bid, branch, doneCount, total: bt, pen }) => {
+            const bpct = bt > 0 ? Math.round((doneCount / bt) * 100) : 0;
+            return (
+              <div key={bid} className="progress-branch-row">
+                <span className="progress-branch-label">{branch?.icon} {branch?.label}</span>
+                <div className="progress-branch-bar">
+                  <div className="progress-branch-fill" style={{ width: `${bpct}%` }} />
+                </div>
+                <span className="progress-branch-count">{doneCount}/{bt}</span>
+                {pen > 0 && <span className="progress-branch-pen">⬇{pen}</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Milestones */}
+        <div className="progress-milestones">
+          <div className="progress-milestones-title">Milestones</div>
+          {MILESTONES.map(m => {
+            const achieved = m.check(progress, total);
+            return (
+              <div key={m.id} className={`progress-milestone ${achieved ? 'achieved' : ''}`}>
+                <span>{achieved ? '✅' : '⬜'}</span>
+                <span>{m.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Learn() {
   const [progress,   setProgress]   = useState(loadProgress);
-  const [reviewData, setReviewData] = useState(() => applyDecay(loadReviewData()));
+  const [reviewData, setReviewData] = useState(loadReviewData);
   const [selected,   setSelected]   = useState(null);
   const [quiz,       setQuiz]       = useState(null);
-  const [tfm,        setTfm]        = useState({ x: 0, y: 0, scale: 1 });
-  const [reviewMode, setReviewMode] = useState(false);
+  const [bigQuiz,      setBigQuiz]      = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
+  const [tfm,          setTfm]          = useState({ x: 0, y: 0, scale: 1 });
 
   const svgRef   = useRef();
   const gRef     = useRef();
@@ -216,11 +477,20 @@ export default function Learn() {
   useEffect(() => { saveProgress(progress);   }, [progress]);
   useEffect(() => { saveReviewData(reviewData); }, [reviewData]);
 
-  // Due nodes
-  const dueNodes = useMemo(
-    () => [...progress].filter(id => isNodeDue(reviewData[id])),
-    [progress, reviewData]
-  );
+  const { branchPenalties } = reviewData;
+
+  // Is big quiz due?
+  const bigQuizDue = useMemo(() => {
+    if (!reviewData.lastBigQuiz) return true;
+    const days = Math.round((todayDate() - new Date(reviewData.lastBigQuiz)) / 86400000);
+    return days >= BIG_INTERVAL_DAYS;
+  }, [reviewData]);
+
+  const daysUntilBigQuiz = useMemo(() => {
+    if (!reviewData.lastBigQuiz) return 0;
+    const days = Math.round((todayDate() - new Date(reviewData.lastBigQuiz)) / 86400000);
+    return Math.max(0, BIG_INTERVAL_DAYS - days);
+  }, [reviewData]);
 
   // ── zoom ──────────────────────────────────────────────────────
   function onWheel(e) {
@@ -231,63 +501,47 @@ export default function Learn() {
     const my = (e.clientY - rect.top) * factor;
     const delta = e.deltaY > 0 ? 0.88 : 1.14;
     setTfm(t => {
-      const newScale = Math.min(3.5, Math.max(0.28, t.scale * delta));
-      const newX = mx - (mx - t.x) * newScale / t.scale;
-      const newY = my - (my - t.y) * newScale / t.scale;
-      return { x: newX, y: newY, scale: newScale };
+      const ns = Math.min(3.5, Math.max(0.28, t.scale * delta));
+      return { x: mx - (mx - t.x) * ns / t.scale, y: my - (my - t.y) * ns / t.scale, scale: ns };
     });
   }
 
-  // ── mouse drag ────────────────────────────────────────────────
+  // ── drag ──────────────────────────────────────────────────────
   function onMouseDown(e) {
     if (e.button !== 0) return;
     const rect = svgRef.current.getBoundingClientRect();
-    dragRef.current = {
-      sx: e.clientX, sy: e.clientY,
-      tx: tfm.x, ty: tfm.y,
-      scale: tfm.scale,
-      factor: 1300 / rect.width,
-      lx: tfm.x, ly: tfm.y,
-    };
+    dragRef.current = { sx: e.clientX, sy: e.clientY, tx: tfm.x, ty: tfm.y,
+      scale: tfm.scale, factor: 1300 / rect.width, lx: tfm.x, ly: tfm.y };
     movedRef.current = false;
   }
   function onMouseMove(e) {
     const d = dragRef.current; if (!d) return;
-    const dx = (e.clientX - d.sx) * d.factor;
-    const dy = (e.clientY - d.sy) * d.factor;
+    const dx = (e.clientX - d.sx) * d.factor, dy = (e.clientY - d.sy) * d.factor;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) movedRef.current = true;
-    const newX = d.tx + dx, newY = d.ty + dy;
-    dragRef.current.lx = newX; dragRef.current.ly = newY;
-    if (gRef.current) gRef.current.setAttribute('transform', `translate(${newX},${newY}) scale(${d.scale})`);
+    const nx = d.tx + dx, ny = d.ty + dy;
+    dragRef.current.lx = nx; dragRef.current.ly = ny;
+    if (gRef.current) gRef.current.setAttribute('transform', `translate(${nx},${ny}) scale(${d.scale})`);
   }
   function onMouseUp() {
     if (dragRef.current) { const { lx, ly } = dragRef.current; setTfm(t => ({ ...t, x: lx, y: ly })); }
     dragRef.current = null;
   }
-
-  // ── touch drag ────────────────────────────────────────────────
   function onTouchStart(e) {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
-    dragRef.current = {
-      sx: t.clientX, sy: t.clientY,
-      tx: tfm.x, ty: tfm.y,
-      scale: tfm.scale,
-      factor: 1300 / svgRef.current.getBoundingClientRect().width,
-      lx: tfm.x, ly: tfm.y,
-    };
+    dragRef.current = { sx: t.clientX, sy: t.clientY, tx: tfm.x, ty: tfm.y,
+      scale: tfm.scale, factor: 1300 / svgRef.current.getBoundingClientRect().width, lx: tfm.x, ly: tfm.y };
     movedRef.current = false;
   }
   function onTouchMove(e) {
     const d = dragRef.current; if (!d || e.touches.length !== 1) return;
     e.preventDefault();
     const t = e.touches[0];
-    const dx = (t.clientX - d.sx) * d.factor;
-    const dy = (t.clientY - d.sy) * d.factor;
+    const dx = (t.clientX - d.sx) * d.factor, dy = (t.clientY - d.sy) * d.factor;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
-    const newX = d.tx + dx, newY = d.ty + dy;
-    dragRef.current.lx = newX; dragRef.current.ly = newY;
-    if (gRef.current) gRef.current.setAttribute('transform', `translate(${newX},${newY}) scale(${d.scale})`);
+    const nx = d.tx + dx, ny = d.ty + dy;
+    dragRef.current.lx = nx; dragRef.current.ly = ny;
+    if (gRef.current) gRef.current.setAttribute('transform', `translate(${nx},${ny}) scale(${d.scale})`);
   }
   function onTouchEnd() {
     if (dragRef.current) { const { lx, ly } = dragRef.current; setTfm(t => ({ ...t, x: lx, y: ly })); }
@@ -298,19 +552,17 @@ export default function Learn() {
     if (movedRef.current) return;
     setSelected(prev => prev === id ? null : id);
   }
-
   function handlePass(id) {
     setProgress(p => { const n = new Set(p); n.add(id); return n; });
-    setReviewData(d => ({ ...d, [id]: { strength: 1, lastReviewed: todayStr() } }));
   }
-
-  function markReview(id, knew) {
+  function handleBigQuizComplete(results) {
     setReviewData(d => {
-      const cur = d[id] || { strength: 1, lastReviewed: todayStr() };
-      const newStrength = knew
-        ? Math.min(4, cur.strength + 1)
-        : Math.max(1, Math.min(2, cur.strength));
-      return { ...d, [id]: { strength: newStrength, lastReviewed: todayStr() } };
+      const penalties = { ...d.branchPenalties };
+      results.forEach(({ branchId, penalty }) => {
+        if (penalty > 0) penalties[branchId] = penalty;
+        else delete penalties[branchId];
+      });
+      return { branchPenalties: penalties, lastBigQuiz: todayStr() };
     });
   }
 
@@ -319,26 +571,26 @@ export default function Learn() {
   const selectedNode   = selected ? TREE.find(n => n.id === selected) : null;
   const selectedStatus = selected ? nodeStatus(selected, progress) : null;
   const parentNode     = selectedNode ? TREE.find(n => n.id === selectedNode.parent) : null;
-  const selRD          = selected ? reviewData[selected] : null;
-  const selStrength    = selRD?.strength ?? 1;
-  const selIsDue       = selected && selectedStatus === 'done' && isNodeDue(selRD);
+  const selStrength    = selected ? getNodeStrength(selected, progress, branchPenalties) : 0;
+  const selBranch      = selected ? getBranch(selected) : null;
+  const selPenalty     = selBranch ? (branchPenalties[selBranch] ?? 0) : 0;
 
-  // ── node colours ──────────────────────────────────────────────
+  // ── colours ───────────────────────────────────────────────────
   function fill(id) {
     const s = nodeStatus(id, progress);
     if (id === 'wine') return '#F0CC7A';
     if (s === 'locked')    return '#1E0814';
     if (s === 'available') return '#C1003D';
-    // done — use strength colour
-    return STRENGTH_COLORS[reviewData[id]?.strength ?? 1] || '#2A7A3A';
+    const str = getNodeStrength(id, progress, branchPenalties);
+    return STRENGTH_COLORS[str] || STRENGTH_COLORS[1];
   }
   function stroke(id) {
     const s = nodeStatus(id, progress);
     if (id === 'wine') return '#F0CC7A';
     if (s === 'done') {
-      const str = reviewData[id]?.strength ?? 1;
+      const str = getNodeStrength(id, progress, branchPenalties);
       if (str >= 4) return '#F0CC7A';
-      if (str >= 3) return '#D4A846';
+      if (str >= 3) return 'rgba(200,120,32,0.7)';
       if (str >= 2) return 'rgba(46,158,96,0.6)';
       return 'rgba(64,128,192,0.6)';
     }
@@ -353,26 +605,27 @@ export default function Learn() {
       <div className="learn-topbar">
         <span className="learn-topbar-title">🍷 Learn</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {dueNodes.length > 0 && (
-            <button
-              className={`review-due-badge${reviewMode ? ' active' : ''}`}
-              onClick={() => setReviewMode(r => !r)}>
-              🔔 {dueNodes.length} due
+          {bigQuizDue ? (
+            <button className="review-due-badge active" onClick={() => setBigQuiz(true)}>
+              🎓 Big Quiz ready
             </button>
+          ) : (
+            <span className="review-due-badge" style={{ cursor: 'default' }}>
+              🎓 Next quiz in {daysUntilBigQuiz}d
+            </span>
           )}
           <button className="learn-topbar-btn" onClick={resetView}>⌖ Reset</button>
           <button className="learn-topbar-btn" onClick={() => setProgress(new Set())}>Clear</button>
         </div>
       </div>
 
-      {/* ── Graph canvas ─────────────────────────────────────────── */}
+      {/* ── Graph ────────────────────────────────────────────────── */}
       <div className="learn-canvas"
         onMouseDown={onMouseDown} onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}    onMouseLeave={onMouseUp}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
 
-        <svg ref={svgRef}
-          viewBox="0 0 1300 1300"
+        <svg ref={svgRef} viewBox="0 0 1300 1300"
           style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none' }}
           onWheel={onWheel}>
           <g ref={gRef} transform={`translate(${tfm.x},${tfm.y}) scale(${tfm.scale})`}>
@@ -383,12 +636,10 @@ export default function Learn() {
               if (!p || !c) return null;
               const s = nodeStatus(n.id, progress);
               return (
-                <line key={n.id + '-e'}
-                  x1={p.x} y1={p.y} x2={c.x} y2={c.y}
+                <line key={n.id + '-e'} x1={p.x} y1={p.y} x2={c.x} y2={c.y}
                   stroke={stroke(n.id)}
                   strokeWidth={s === 'locked' ? 1 : 1.8}
-                  opacity={s === 'locked' ? 0.28 : 0.55}
-                />
+                  opacity={s === 'locked' ? 0.28 : 0.55} />
               );
             })}
 
@@ -399,51 +650,41 @@ export default function Learn() {
               const r  = NODE_R[d]  ?? 14;
               const fs = FONT_SZ[d] ?? 7;
               const is = ICON_SZ[d] ?? 8;
-              const status = nodeStatus(n.id, progress);
-              const locked = status === 'locked';
-              const done   = status === 'done';
-              const isSel  = selected === n.id;
-              const isDue  = reviewMode && done && dueNodes.includes(n.id);
-              const str    = done ? (reviewData[n.id]?.strength ?? 1) : 0;
+              const status  = nodeStatus(n.id, progress);
+              const locked  = status === 'locked';
+              const done    = status === 'done';
+              const isSel   = selected === n.id;
+              const str     = done ? getNodeStrength(n.id, progress, branchPenalties) : 0;
+              const hasPen  = done && (branchPenalties[getBranch(n.id)] ?? 0) > 0;
 
               return (
-                <g key={n.id}
-                  style={{ cursor: locked ? 'default' : 'pointer' }}
+                <g key={n.id} style={{ cursor: locked ? 'default' : 'pointer' }}
                   onClick={() => handleNodeClick(n.id)}>
-
-                  {/* Mastered glow */}
+                  {/* Glow */}
                   {str >= 4 && <circle cx={pos.x} cy={pos.y} r={r + 10} fill="#F0CC7A" opacity="0.12" />}
-                  {/* Done glow (not mastered) */}
-                  {done && str < 4 && <circle cx={pos.x} cy={pos.y} r={r + 10} fill={STRENGTH_COLORS[str]} opacity="0.10" />}
-
-                  {/* Due-for-review pulsing ring */}
-                  {isDue && (
-                    <circle cx={pos.x} cy={pos.y} r={r + 8}
-                      fill="none" stroke="#D4A846" strokeWidth="2.5"
-                      className="review-ring" />
-                  )}
-
+                  {done && str < 4 && <circle cx={pos.x} cy={pos.y} r={r + 10} fill={STRENGTH_COLORS[str]} opacity="0.08" />}
                   {/* Selected ring */}
                   {isSel && <circle cx={pos.x} cy={pos.y} r={r + 7} fill="none" stroke="#F0CC7A" strokeWidth="2" opacity="0.8" />}
-
+                  {/* Penalty indicator — small dashed ring */}
+                  {hasPen && !isSel && (
+                    <circle cx={pos.x} cy={pos.y} r={r + 5} fill="none"
+                      stroke="rgba(193,0,61,0.5)" strokeWidth="1.2" strokeDasharray="3 3" />
+                  )}
                   <circle cx={pos.x} cy={pos.y} r={r}
                     fill={fill(n.id)}
                     stroke={isSel ? '#F0CC7A' : stroke(n.id)}
                     strokeWidth={isSel ? 2.5 : 1.5}
-                    opacity={locked ? 0.28 : 1}
-                  />
+                    opacity={locked ? 0.28 : 1} />
                   <text x={pos.x} y={pos.y - 2}
                     textAnchor="middle" dominantBaseline="middle"
                     fontSize={is} opacity={locked ? 0.2 : 1}>
                     {locked ? '🔒' : n.icon}
                   </text>
                   <text x={pos.x} y={pos.y + r + 7}
-                    textAnchor="middle"
-                    fontSize={fs}
+                    textAnchor="middle" fontSize={fs}
                     fontFamily="Playfair Display, serif"
                     fill={locked ? '#2E0E1E' : '#E8D0B0'}
-                    fontWeight="600"
-                    opacity={locked ? 0.35 : 1}>
+                    fontWeight="600" opacity={locked ? 0.35 : 1}>
                     {n.label}
                   </text>
                 </g>
@@ -453,15 +694,31 @@ export default function Learn() {
         </svg>
       </div>
 
-      {/* ── Legend ───────────────────────────────────────────────── */}
+      {/* ── Legend + level badge ─────────────────────────────────── */}
       <div className="learn-legend-float">
-        <span className="legend-item"><span className="legend-dot" style={{ background: '#2A7A3A' }} />New</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: '#C1003D' }} />Learning</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: '#D4A846' }} />Strong</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: '#4080C0' }} />New</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: '#2E9E60' }} />Learning</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: '#C87820' }} />Strong</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: '#F0CC7A' }} />Mastered</span>
         <span className="legend-item"><span className="legend-dot available" />Available</span>
         <span className="legend-hint">Scroll · Drag · Click</span>
       </div>
+
+      {/* ── Level badge (bottom-right) ──────────────────────────── */}
+      {(() => {
+        const total  = TREE.filter(n => n.id !== 'wine').length;
+        const pct    = total > 0 ? Math.round((progress.size / total) * 100) : 0;
+        const level  = getLevel(pct);
+        return (
+          <button className="level-badge" onClick={() => setShowProgress(true)}>
+            <span className="level-badge-emoji">{level.emoji}</span>
+            <div className="level-badge-text">
+              <span className="level-badge-name">{level.name}</span>
+              <span className="level-badge-pct">{pct}%</span>
+            </div>
+          </button>
+        );
+      })()}
 
       {/* ── Info panel ───────────────────────────────────────────── */}
       {selected && selectedNode && (
@@ -475,9 +732,7 @@ export default function Learn() {
             <button className="node-panel-close" onClick={() => setSelected(null)}>✕</button>
           </div>
 
-          <div className="node-panel-info">
-            {INFO[selected] || 'More information coming soon.'}
-          </div>
+          <div className="node-panel-info">{INFO[selected] || 'More information coming soon.'}</div>
 
           <div className="node-panel-footer">
             {selectedStatus === 'locked' ? (
@@ -487,38 +742,24 @@ export default function Learn() {
 
             ) : selectedStatus === 'done' ? (
               <>
-                {/* Strength row */}
+                {/* Strength display */}
                 <div className="review-strength-row">
                   <div className="strength-dots">
                     {[1, 2, 3, 4].map(i => (
                       <span key={i} className="strength-dot"
                         style={{ background: i <= selStrength ? STRENGTH_COLORS[selStrength] : 'rgba(255,255,255,0.1)' }} />
                     ))}
-                    <span className="strength-label"
-                      style={{ color: STRENGTH_COLORS[selStrength] }}>
+                    <span className="strength-label" style={{ color: STRENGTH_COLORS[selStrength] }}>
                       {STRENGTH_LABELS[selStrength]}
                     </span>
                   </div>
-                  <div className="review-dates">
-                    <span>Last: {lastReviewedText(selRD)}</span>
-                    <span className={selIsDue ? 'due-now' : ''}>{nextReviewText(selRD)}</span>
-                  </div>
+                  {selPenalty > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--rose)' }}>
+                      ⬇ −{selPenalty} from big quiz
+                    </span>
+                  )}
                 </div>
-
-                {/* Review buttons */}
-                <div className="review-btn-row">
-                  <button className="review-btn still-learning"
-                    onClick={() => markReview(selected, false)}>
-                    🔁 Still learning
-                  </button>
-                  <button className="review-btn knew-it"
-                    onClick={() => markReview(selected, true)}>
-                    ✅ I knew this
-                  </button>
-                </div>
-
-                {/* Retake quiz */}
-                <button className="btn-ghost" style={{ fontSize: 12, padding: '6px 12px', marginTop: 6 }}
+                <button className="btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }}
                   onClick={() => { setSelected(null); setQuiz(selected); }}>
                   Retake quiz
                 </button>
@@ -527,7 +768,7 @@ export default function Learn() {
             ) : (
               <button className="btn-primary"
                 onClick={() => { setSelected(null); setQuiz(selected); }}>
-                Take Quiz ({TOTAL_Q} questions) →
+                Take Quiz ({TOTAL_Q} questions, need 80%) →
               </button>
             )}
           </div>
@@ -536,6 +777,12 @@ export default function Learn() {
 
       {quiz && (
         <QuizModal nodeId={quiz} onClose={() => setQuiz(null)} onPass={handlePass} />
+      )}
+      {bigQuiz && (
+        <BigQuizModal onClose={() => setBigQuiz(false)} onComplete={handleBigQuizComplete} />
+      )}
+      {showProgress && (
+        <ProgressModal progress={progress} reviewData={reviewData} onClose={() => setShowProgress(false)} />
       )}
     </div>
   );

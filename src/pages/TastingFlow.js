@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWine } from '../context/WineContext';
-import { WINE_GRAPES, WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
+import { WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
+import GrapeInput from '../components/GrapeInput';
 
 // ─── Nose free-pick descriptors ────────────────────────────────────────────────
 const NOSE_DESCRIPTORS = [
@@ -173,9 +174,8 @@ function WineInfoStep({ form, set }) {
         </div>
       </div>
       <div className="form-group">
-        <label>Grape</label>
-        <input value={form.grape} onChange={e => set('grape', e.target.value)} placeholder="Cabernet Sauvignon" list="grape-list" />
-        <datalist id="grape-list">{WINE_GRAPES.map(g => <option key={g} value={g} />)}</datalist>
+        <label>Grape(s)</label>
+        <GrapeInput value={form.grape} onChange={v => set('grape', v)} listId="wine-info-grape-list" />
       </div>
     </>
   );
@@ -337,8 +337,7 @@ export function BlindTasting() {
           <p className="step-intro">What's your guess?</p>
           <div className="form-group">
             <label>Grape variety</label>
-            <input value={form.guessGrape} onChange={e => set('guessGrape', e.target.value)} placeholder="e.g. Pinot Noir" list="guess-grape-list" />
-            <datalist id="guess-grape-list">{WINE_GRAPES.map(g => <option key={g} value={g} />)}</datalist>
+            <GrapeInput value={form.guessGrape} onChange={v => set('guessGrape', v)} listId="guess-grape-list" placeholder="e.g. Pinot Noir" />
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -370,8 +369,8 @@ export function BlindTasting() {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>Actual grape</label>
-              <input value={form.grape} onChange={e => set('grape', e.target.value)} />
+              <label>Actual grape(s)</label>
+              <GrapeInput value={form.grape} onChange={v => set('grape', v)} listId="reveal-grape-list" placeholder="e.g. Malbec" />
             </div>
             <div className="form-group">
               <label>Actual vintage</label>
