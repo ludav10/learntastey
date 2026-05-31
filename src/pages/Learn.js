@@ -752,15 +752,10 @@ export default function Learn() {
       {/* ── Level badge (bottom-right) ──────────────────────────── */}
       {(() => {
         const total  = TREE.filter(n => n.id !== 'wine').length;
-        const pct    = total > 0 ? Math.round((progress.size / total) * 100) : 0;
-        const level  = getLevel(pct);
+        const pct = total > 0 ? Math.round((progress.size / total) * 100) : 0;
         return (
           <button className="level-badge" onClick={() => setShowProgress(true)}>
-            <span className="level-badge-emoji">{level.emoji}</span>
-            <div className="level-badge-text">
-              <span className="level-badge-name">{level.name}</span>
-              <span className="level-badge-pct">{pct}%</span>
-            </div>
+            <span className="level-badge-pct">{pct}%</span>
           </button>
         );
       })()}
