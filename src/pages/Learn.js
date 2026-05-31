@@ -355,19 +355,6 @@ function BigQuizModal({ onClose, onComplete }) {
   );
 }
 
-// ── Progress level thresholds ─────────────────────────────────────────────────
-const LEVELS = [
-  { min: 0,   name: 'Novice',      emoji: '🌱' },
-  { min: 15,  name: 'Beginner',    emoji: '📖' },
-  { min: 35,  name: 'Enthusiast',  emoji: '🍷' },
-  { min: 55,  name: 'Connoisseur', emoji: '🍾' },
-  { min: 75,  name: 'Expert',      emoji: '🏆' },
-  { min: 100, name: 'Master',      emoji: '🎓' },
-];
-
-function getLevel(pct) {
-  return [...LEVELS].reverse().find(l => pct >= l.min) || LEVELS[0];
-}
 
 const MILESTONES = [
   { id: 'first',    label: 'First quiz passed',      check: (p) => p.size >= 1 },
@@ -382,9 +369,6 @@ const MILESTONES = [
 function ProgressModal({ progress, reviewData, onClose }) {
   const allNodes  = TREE.filter(n => n.id !== 'wine');
   const total     = allNodes.length;
-  const done      = progress.size;
-  const pct       = total > 0 ? Math.round((done / total) * 100) : 0;
-  const level     = getLevel(pct);
 
   const branches = BRANCH_IDS.map(bid => {
     const nodes    = getBranchNodes(bid);
@@ -400,29 +384,6 @@ function ProgressModal({ progress, reviewData, onClose }) {
         <div className="progress-modal-header">
           <h2 className="progress-modal-title">Your Progress</h2>
           <button className="node-panel-close" onClick={onClose}>✕</button>
-        </div>
-
-        {/* Overall level */}
-        <div className="progress-level-badge">
-          <span className="progress-level-emoji">{level.emoji}</span>
-          <div>
-            <div className="progress-level-name">{level.name}</div>
-            <div className="progress-level-sub">{done} / {total} nodes completed</div>
-          </div>
-          <div className="progress-pct">{pct}%</div>
-        </div>
-        <div className="progress-bar-wrap">
-          <div className="progress-bar-track">
-            <div className="progress-bar-fill" style={{ width: `${pct}%`, background: pct >= 100 ? '#F0CC7A' : pct >= 75 ? '#C87820' : pct >= 55 ? '#2E9E60' : '#4080C0' }} />
-          </div>
-          {/* Level markers */}
-          <div className="progress-level-markers">
-            {LEVELS.slice(1).map(l => (
-              <div key={l.min} className="progress-marker" style={{ left: `${l.min}%` }} title={l.name}>
-                <div className="progress-marker-dot" />
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Branch breakdown */}
