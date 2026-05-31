@@ -7,6 +7,7 @@ import Journal from './pages/Journal';
 import Learn from './pages/Learn';
 import { QuickLog, OpenTasting, BlindTasting } from './pages/TastingFlow';
 import TastingParty from './pages/TastingParty';
+import TastingPartyMulti from './pages/TastingPartyMulti';
 import Level from './pages/Level';
 import { SvgWineGlass, SvgGrapes, SvgBarrel, SvgBottle, SvgLeaf, SvgCorkscrew } from './components/WineDecorations';
 import './App.css';
@@ -37,6 +38,7 @@ export default function App() {
               <Route path="/tasting/open" element={<OpenTasting />} />
               <Route path="/tasting/blind" element={<BlindTasting />} />
               <Route path="/party" element={<TastingParty />} />
+              <Route path="/party/multi" element={<TastingPartyMulti />} />
               <Route path="/level" element={<Level />} />
             </Routes>
           </main>

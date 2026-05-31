@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWine, XP_EARN } from '../context/WineContext';
 import GrapeInput from '../components/GrapeInput';
 import { WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
@@ -116,6 +117,7 @@ function scoreAll(rawPlayers, answer) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function TastingParty() {
   const { addXP } = useWine();
+  const navigate = useNavigate();
   const [mode,    setMode]    = useState(null);       // null | 'one' | 'multi'
   const [phase,   setPhase]   = useState('intro');
   const [answer,  setAnswer]  = useState({ ...EMPTY_ANSWER });
@@ -123,7 +125,7 @@ export default function TastingParty() {
   const [current, setCurrent] = useState({ name: '', ...EMPTY_GUESS });
 
   function startGuessing() { setPlayers([]); setPhase('name'); }
-  function chooseMode(m)   { setMode(m); if (m === 'one') setPhase('setup'); }
+  function chooseMode(m)   { if (m === 'multi') { navigate('/party/multi'); return; } setMode(m); if (m === 'one') setPhase('setup'); }
 
   function nextPlayer() {
     setPlayers(p => [...p, { name: current.name, guess: { ...current } }]);

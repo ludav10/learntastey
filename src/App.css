@@ -2562,6 +2562,94 @@ body {
   margin-bottom: 4px;
 }
 
+/* ─── MULTIPLAYER PARTY ─── */
+.party-code-display {
+  font-size: 72px;
+  font-weight: 900;
+  letter-spacing: 12px;
+  color: var(--gold);
+  font-family: 'Playfair Display', serif;
+  margin: 12px 0;
+  line-height: 1;
+}
+.party-url-hint {
+  font-size: 12px;
+  color: var(--text-mute);
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 4px 0;
+  word-break: break-all;
+}
+.party-code-input {
+  width: 160px;
+  font-size: 48px;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 8px;
+  padding: 12px;
+  background: var(--bg2);
+  border: 2px solid var(--border2);
+  border-radius: var(--radius-sm);
+  color: var(--gold);
+  outline: none;
+  margin: 12px auto;
+  display: block;
+  transition: border-color 0.15s;
+}
+.party-code-input:focus { border-color: var(--ruby); }
+.party-joined-count {
+  font-size: 14px;
+  color: var(--text-mid);
+  margin: 8px 0;
+}
+.party-submitted-count {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold);
+  margin: 8px 0;
+}
+.party-player-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.party-player-chip {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--cream);
+  transition: background 0.2s, border-color 0.2s;
+}
+.party-player-chip.submitted {
+  background: rgba(46,158,96,0.2);
+  border-color: #2E9E60;
+  color: #6FD9A0;
+}
+.party-error {
+  background: rgba(193,0,61,0.15);
+  border: 1px solid var(--ruby);
+  border-radius: 8px;
+  color: #ff6b8a;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-top: 8px;
+  text-align: center;
+}
+.party-waiting-pulse {
+  font-size: 56px;
+  margin-bottom: 12px;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 480px) {
   .tasting-cards { grid-template-columns: 1fr; }
