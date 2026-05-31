@@ -77,10 +77,52 @@ function EditModal({ wine, onSave, onClose }) {
   );
 }
 
+function exportCSV(wines) {
+  const cols = ['Name','Vintage','Colour','Country','Region','Grape','Rating','Nose','Palate','Finish','Notes','Date'];
+  const rows = wines.map(w => [
+    w.name, w.vintage, w.color, w.country, w.region, w.grape,
+    w.rating, w.nose, w.palate, w.finish, w.notes,
+    w.date ? new Date(w.date).toLocaleDateString() : '',
+  ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`));
+  const csv = [cols.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'wine-journal.csv';
+  a.click();
+}
+
+function exportPDF(wines) {
+  const rows = wines.map(w => `
+    <tr>
+      <td>${w.name || ''}</td><td>${w.vintage || ''}</td><td>${w.color || ''}</td>
+      <td>${w.country || ''}</td><td>${w.region || ''}</td><td>${w.grape || ''}</td>
+      <td>${w.rating ?? ''}</td><td>${w.notes || ''}</td>
+    </tr>`).join('');
+  const html = `<html><head><title>Wine Journal</title><style>
+    body{font-family:sans-serif;font-size:12px;padding:20px}
+    h1{margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+    th{background:#f5f5f5;font-weight:bold}
+    tr:nth-child(even){background:#fafafa}
+  </style></head><body>
+    <h1>🍷 My Wine Journal</h1>
+    <table><thead><tr>
+      <th>Name</th><th>Vintage</th><th>Colour</th><th>Country</th>
+      <th>Region</th><th>Grape</th><th>Rating</th><th>Notes</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
+
 export default function Journal() {
   const { wines, deleteWine, updateWine } = useWine();
   const navigate = useNavigate();
   const [filter, setFilter] = useState('All');
+  const [showExport, setShowExport] = useState(false);
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -109,7 +151,20 @@ export default function Journal() {
     <div className="page journal-page">
       <div className="page-header">
         <h1 className="page-title">My Journal</h1>
-        <button className="btn-primary" onClick={() => navigate('/tasting/quick')}>+ Log wine</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
+          {wines.length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button className="btn-secondary" onClick={() => setShowExport(v => !v)}>Export ↓</button>
+              {showExport && (
+                <div className="export-menu" onClick={() => setShowExport(false)}>
+                  <button onClick={() => exportCSV(wines)}>📊 Download CSV</button>
+                  <button onClick={() => exportPDF(wines)}>🖨️ Print / PDF</button>
+                </div>
+              )}
+            </div>
+          )}
+          <button className="btn-primary" onClick={() => navigate('/tasting/quick')}>+ Log wine</button>
+        </div>
       </div>
 
       <input
