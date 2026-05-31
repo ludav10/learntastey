@@ -5,7 +5,7 @@ const BASE_ITEMS = [
   { to: '/',        end: true, icon: '🏠', label: 'Home'    },
   { to: '/journal',            icon: '📓', label: 'Journal' },
   { to: '/learn',              icon: '🎓', label: 'Learn'   },
-  { to: '/party',              icon: '🎉', label: 'Party'   },
+  { to: '/party',              icon: '🎉', label: 'Games'   },
 ];
 
 export default function Navbar() {

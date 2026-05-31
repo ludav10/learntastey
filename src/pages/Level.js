@@ -48,7 +48,7 @@ export default function Level() {
         </div>
         <div className="level-stat">
           <div className="level-stat-val">{partyGames}</div>
-          <div className="level-stat-label">Party games</div>
+          <div className="level-stat-label">Games</div>
         </div>
       </div>
 
@@ -58,7 +58,7 @@ export default function Level() {
         <div className="level-xp-bars">
           <XPBar label="🎓 Learning" value={breakdown.learn || 0} total={xp} color="#4080C0" />
           <XPBar label="📓 Journal"  value={breakdown.journal || 0} total={xp} color="#2E9E60" />
-          <XPBar label="🎉 Party"    value={breakdown.party || 0}   total={xp} color="#C87820" />
+          <XPBar label="🎉 Games"    value={breakdown.party || 0}   total={xp} color="#C87820" />
         </div>
       </div>
 

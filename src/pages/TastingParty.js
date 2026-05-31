@@ -160,7 +160,7 @@ export default function TastingParty() {
     <div className="party-page">
       <div className="party-hero">
         <div className="party-hero-emoji">🍷</div>
-        <h1 className="party-hero-title">Tasting Party</h1>
+        <h1 className="party-hero-title">Games</h1>
         <p className="party-hero-sub">Pour the wine. See who knows their stuff.</p>
       </div>
 
