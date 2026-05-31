@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useWine } from '../context/WineContext';
+import { useWine, XP_EARN } from '../context/WineContext';
 import GrapeInput from '../components/GrapeInput';
 import { WINE_COUNTRIES, getRegionsForCountry } from '../data/wineRegions';
 
@@ -115,15 +115,15 @@ function scoreAll(rawPlayers, answer) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function TastingParty() {
-  const { addWine } = useWine();
+  const { addXP } = useWine();
+  const [mode,    setMode]    = useState(null);       // null | 'one' | 'multi'
   const [phase,   setPhase]   = useState('intro');
   const [answer,  setAnswer]  = useState({ ...EMPTY_ANSWER });
   const [players, setPlayers] = useState([]);        // unscored while guessing
   const [current, setCurrent] = useState({ name: '', ...EMPTY_GUESS });
-  const [saved,   setSaved]   = useState(false);
 
-  function startSetup()    { setPhase('setup'); }
   function startGuessing() { setPlayers([]); setPhase('name'); }
+  function chooseMode(m)   { setMode(m); if (m === 'one') setPhase('setup'); }
 
   function nextPlayer() {
     setPlayers(p => [...p, { name: current.name, guess: { ...current } }]);
@@ -134,42 +134,24 @@ export default function TastingParty() {
   function doReveal(rawList) {
     const scored = scoreAll(rawList, answer);
     setPlayers(scored);
+    // XP based on winner's performance — better game = more XP
+    const topScore = scored.length > 0 ? Math.max(...scored.map(p => p.pts)) : 0;
+    const xpAmt = Math.max(5, Math.round((topScore / MAX_PTS) * XP_EARN.party));
+    addXP(xpAmt, 'party');
     setPhase('reveal');
   }
 
   function revealFromName()  { doReveal(players); }
   function revealLastPlayer(){ doReveal([...players, { name: current.name, guess: { ...current } }]); }
 
-  function saveToJournal() {
-    const ratings = players.map(p => p.guess.rating).filter(Boolean);
-    const avgRating = ratings.length ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 2) / 2 : 7;
-    const topScorer = [...players].sort((a, b) => b.pts - a.pts)[0];
-    addWine({
-      name:        answer.grape || 'Mystery Wine',
-      color:       answer.color,
-      grape:       answer.grape,
-      country:     answer.country,
-      region:      answer.region,
-      vintage:     answer.vintage?.toString(),
-      rating:      avgRating,
-      tastingType: 'blind',
-      notes:       `Party tasting · ${players.map(p => `${p.name} (${p.pts}pts)`).join(', ')}` +
-                   (topScorer ? ` · Winner: ${topScorer.name} 🏆` : ''),
-      nose:        '',
-      palate:      '',
-      date:        new Date().toLocaleDateString('en-GB'),
-    });
-    setSaved(true);
-  }
-
   function restart() {
     setPlayers([]); setCurrent({ name: '', ...EMPTY_GUESS });
-    setAnswer({ ...EMPTY_ANSWER }); setSaved(false); setPhase('intro');
+    setAnswer({ ...EMPTY_ANSWER }); setMode(null); setPhase('intro');
   }
 
-  const sorted = phase === 'reveal' ? [...players].sort((a, b) => b.pts - a.pts) : [];
-  const MEDALS = ['🥇', '🥈', '🥉'];
   const MAX_PTS = 2 + 2 + 4 + 4 + 6 + 5 + 3; // = 26
+  const sorted  = phase === 'reveal' ? [...players].sort((a, b) => b.pts - a.pts) : [];
+  const MEDALS  = ['🥇', '🥈', '🥉'];
 
   // ── Intro ──────────────────────────────────────────────────────────────────
   if (phase === 'intro') return (
@@ -177,17 +159,42 @@ export default function TastingParty() {
       <div className="party-hero">
         <div className="party-hero-emoji">🍷</div>
         <h1 className="party-hero-title">Tasting Party</h1>
-        <p className="party-hero-sub">Pour the wine. Pass the phone. See who knows their stuff.</p>
-        <button className="btn-primary party-start-btn" onClick={startSetup}>Start game →</button>
+        <p className="party-hero-sub">Pour the wine. See who knows their stuff.</p>
       </div>
-      <div className="party-how">
-        <div className="party-step"><span>1</span>Host enters the wine details (kept secret)</div>
-        <div className="party-step"><span>2</span>Each player submits their blind guesses</div>
-        <div className="party-step"><span>3</span>Big reveal — leaderboard &amp; scores</div>
+
+      <div className="party-mode-row">
+        <button className="party-mode-card" onClick={() => chooseMode('one')}>
+          <div className="party-mode-emoji">📱</div>
+          <div className="party-mode-title">One Phone</div>
+          <div className="party-mode-sub">Pass the phone around. Classic mode.</div>
+          <div className="btn-primary" style={{marginTop:12,fontSize:13,padding:'8px 20px'}}>Play now →</div>
+        </button>
+        <button className="party-mode-card coming-soon" onClick={() => chooseMode('multi')}>
+          <div className="party-mode-emoji">🎉</div>
+          <div className="party-mode-title">Each Phone</div>
+          <div className="party-mode-sub">Everyone answers on their own device.</div>
+          <div className="party-mode-badge">Coming soon</div>
+        </button>
       </div>
+
       <div className="party-scoring-hint">
         <strong>Scoring:</strong> Colour · World · Grape · Country · Region — exact wins.
         <br />Vintage &amp; Price — <em>closest player gets most points!</em>
+      </div>
+    </div>
+  );
+
+  // ── Multi-phone coming soon ─────────────────────────────────────────────────
+  if (mode === 'multi') return (
+    <div className="party-page">
+      <div className="party-card" style={{textAlign:'center',paddingTop:40,paddingBottom:40}}>
+        <div style={{fontSize:56,marginBottom:12}}>🚧</div>
+        <h2 className="party-card-title">Coming soon!</h2>
+        <p className="party-hint" style={{marginBottom:24}}>
+          Multiplayer mode — where everyone joins on their own phone — is coming in the next update.
+          <br /><br />For now, use One Phone mode and pass it around!
+        </p>
+        <button className="btn-primary" onClick={() => { setMode(null); setPhase('intro'); }}>← Back</button>
       </div>
     </div>
   );
@@ -389,12 +396,7 @@ export default function TastingParty() {
       </div>
 
       <div className="party-actions">
-        {!saved ? (
-          <button className="btn-primary full" onClick={saveToJournal}>📓 Save to Journal as blind tasting</button>
-        ) : (
-          <div className="party-saved-msg">✅ Saved to your Journal!</div>
-        )}
-        <button className="btn-ghost full" style={{ marginTop: 8 }} onClick={restart}>Play again 🍷</button>
+        <button className="btn-primary full" onClick={restart}>Play again 🍷</button>
       </div>
     </div>
   );

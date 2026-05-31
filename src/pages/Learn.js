@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { TREE, QUIZZES, INFO } from '../data/wineTree';
+import { useWine, XP_EARN } from '../context/WineContext';
 
 const PASS_SCORE = 12;   // 80% of 15
 const TOTAL_Q    = 15;
@@ -214,7 +215,7 @@ function QuizModal({ nodeId, onClose, onPass }) {
             <div className="modal-footer" style={{ marginTop: 24 }}>
               <button className="btn-ghost" onClick={onClose}>Close</button>
               {passed
-                ? <button className="btn-primary" onClick={() => { onPass(nodeId); onClose(); }}>Continue →</button>
+                ? <button className="btn-primary" onClick={() => { onPass(nodeId, score); onClose(); }}>Continue →</button>
                 : <button className="btn-primary" onClick={() => { setQi(0); setChosen(null); setScore(0); setDone(false); }}>Retry</button>
               }
             </div>
@@ -461,6 +462,7 @@ function ProgressModal({ progress, reviewData, onClose }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Learn() {
+  const { addXP } = useWine();
   const [progress,   setProgress]   = useState(loadProgress);
   const [reviewData, setReviewData] = useState(loadReviewData);
   const [selected,   setSelected]   = useState(null);
@@ -552,8 +554,11 @@ export default function Learn() {
     if (movedRef.current) return;
     setSelected(prev => prev === id ? null : id);
   }
-  function handlePass(id) {
+  function handlePass(id, score) {
     setProgress(p => { const n = new Set(p); n.add(id); return n; });
+    // Performance XP: 12→20, 13→28, 14→38, 15→50
+    const xpTable = { 12: 20, 13: 28, 14: 38, 15: 50 };
+    addXP(xpTable[score] ?? Math.round((score / TOTAL_Q) * 50), 'learn');
   }
   function handleBigQuizComplete(results) {
     setReviewData(d => {
@@ -564,6 +569,12 @@ export default function Learn() {
       });
       return { branchPenalties: penalties, lastBigQuiz: todayStr() };
     });
+    // Performance XP: 10 base + (correct/7 * 10) per branch
+    const earned = 10 + results.reduce((sum, r) => sum + Math.round((r.correct / r.total) * 10), 0);
+    addXP(earned, 'learn');
+    // Penalty XP loss: −8 per step-back-1 branch, −18 per step-back-2 branch
+    const lost = results.reduce((sum, r) => sum + (r.penalty === 1 ? 8 : r.penalty === 2 ? 18 : 0), 0);
+    if (lost > 0) addXP(-lost, 'learn');
   }
 
   function resetView() { setTfm({ x: 0, y: 0, scale: 1 }); }
